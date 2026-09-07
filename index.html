@@ -2673,14 +2673,14 @@
     function familyOfTheme(key){
       return Object.values(THEME_FAMILIES).find(f => f.dark === key || f.light === key) || THEME_FAMILIES.sky;
     }
-    function systemPrefersDark(){
-      try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); }
-      catch { return true; }
+    function isNightTimeNow(){
+      const h = new Date().getHours();
+      return h < 6 || h >= 19; // לילה: 19:00–06:00, יום: 06:00–19:00
     }
     function resolveThemeForMode(mode, family){
       if (mode === "light") return family.light;
       if (mode === "dark") return family.dark;
-      return systemPrefersDark() ? family.dark : family.light; // auto
+      return isNightTimeNow() ? family.dark : family.light; // auto — לפי השעה
     }
     function toggleThemeMode(){
       const order = ["dark", "auto", "light"];
@@ -2690,15 +2690,13 @@
       state.theme = resolveThemeForMode(nextMode, family);
       save(); render();
     }
-    if (window.matchMedia) {
-      const systemDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const onSystemThemeChange = () => {
-        if ((state.themeMode || "dark") !== "auto") return;
-        state.theme = resolveThemeForMode("auto", familyOfTheme(state.theme));
-        save(); render();
-      };
-      systemDarkQuery.addEventListener ? systemDarkQuery.addEventListener("change", onSystemThemeChange) : systemDarkQuery.addListener(onSystemThemeChange);
-    }
+    // באוטומט נבדוק כל כמה דקות אם השעה עברה את סף יום/לילה, כדי שהעיצוב
+    // יתעדכן לבד גם בלי לגעת באפליקציה.
+    setInterval(() => {
+      if ((state.themeMode || "dark") !== "auto") return;
+      const resolved = resolveThemeForMode("auto", familyOfTheme(state.theme));
+      if (resolved !== state.theme) { state.theme = resolved; save(); render(); }
+    }, 5 * 60 * 1000);
     function render(){
       updateGreeting();
       applyTheme();
@@ -8371,9 +8369,9 @@
       const themeToggleEls = document.querySelectorAll("#themeToggleBtn, .js-theme-toggle");
       if (themeToggleEls.length) {
         const mode = state.themeMode || "dark";
-        const icon = mode === "auto" ? "🔄" : (mode === "light" ? "☀️" : "🌙");
+        const icon = mode === "auto" ? "🕒" : (mode === "light" ? "☀️" : "🌙");
         const modeClass = mode === "auto" ? "auto-mode" : (mode === "light" ? "light-mode" : "dark-mode");
-        const titleMap = { dark:"מצב כהה — לחצו למעבר לאוטומט", auto:"מצב אוטומטי (לפי המערכת) — לחצו למעבר לבהיר", light:"מצב בהיר — לחצו למעבר לכהה" };
+        const titleMap = { dark:"מצב כהה — לחצו למעבר לאוטומט", auto:"מצב אוטומטי (לפי השעה: יום=בהיר, לילה=כהה) — לחצו למעבר לבהיר", light:"מצב בהיר — לחצו למעבר לכהה" };
         themeToggleEls.forEach(btn => {
           btn.classList.add("theme-toggle");
           btn.classList.remove("light-mode", "dark-mode", "auto-mode");
