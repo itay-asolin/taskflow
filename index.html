@@ -66,14 +66,23 @@
     .google-btn{background:#fff;color:#3c4043;border-color:#dadce0;font-weight:700}
     .google-btn:hover{box-shadow:0 1px 3px rgba(0,0,0,.15);background:#f8f8f8}
     .btn.icon{width:34px;height:34px;padding:0}
-    /* ── Theme Toggle Pill ── */
-    .theme-toggle{width:58px;min-width:58px;max-width:58px;height:30px;border:0!important;border-radius:999px;padding:0;background:transparent;box-shadow:none;display:flex;align-items:center;justify-content:center}
-    .theme-toggle .theme-pill{display:flex;align-items:center;width:54px;height:28px;border-radius:999px;border:1.5px solid var(--border);background:var(--card2);position:relative;box-shadow:0 2px 8px rgba(0,0,0,.22);transition:background .22s,border-color .22s;flex-shrink:0}
-    .theme-toggle .theme-icon{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;position:absolute;top:2px;transition:left .22s cubic-bezier(.34,1.3,.64,1),background .22s;box-shadow:0 1px 5px rgba(0,0,0,.3);line-height:1}
+    /* ── Theme Toggle Pill (3 stops: dark / auto / light) ── */
+    .theme-toggle{width:74px;min-width:74px;max-width:74px;height:30px;border:0!important;border-radius:999px;padding:0;background:transparent;box-shadow:none;display:flex;align-items:center;justify-content:center}
+    .theme-toggle .theme-pill{display:flex;align-items:center;width:70px;height:28px;border-radius:999px;border:1.5px solid var(--border);background:var(--card2);position:relative;box-shadow:0 2px 8px rgba(0,0,0,.22);transition:background .22s,border-color .22s;flex-shrink:0}
+    .theme-toggle .theme-dot{position:absolute;top:50%;width:4px;height:4px;border-radius:50%;background:var(--faint);opacity:.6;transform:translateY(-50%);pointer-events:none}
+    .theme-toggle .theme-dot.dot-dark{left:11px}
+    .theme-toggle .theme-dot.dot-auto{left:50%;transform:translate(-50%,-50%)}
+    .theme-toggle .theme-dot.dot-light{right:11px}
+    .theme-toggle .theme-icon{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;position:absolute;top:2px;transition:left .22s cubic-bezier(.34,1.3,.64,1),background .22s;box-shadow:0 1px 5px rgba(0,0,0,.3);line-height:1;z-index:1}
     .theme-toggle.dark-mode .theme-pill{background:rgba(109,93,252,.18);border-color:rgba(109,93,252,.4)}
     .theme-toggle.dark-mode .theme-icon{left:2px;background:var(--accent)}
+    .theme-toggle.auto-mode .theme-pill{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.45)}
+    .theme-toggle.auto-mode .theme-icon{left:24px;background:var(--muted);color:#fff}
     .theme-toggle.light-mode .theme-pill{background:rgba(251,191,36,.18);border-color:rgba(251,191,36,.5)}
-    .theme-toggle.light-mode .theme-icon{left:28px;background:#f59e0b}
+    .theme-toggle.light-mode .theme-icon{left:46px;background:#f59e0b}
+    .theme-toggle.dark-mode .theme-dot.dot-dark,
+    .theme-toggle.auto-mode .theme-dot.dot-auto,
+    .theme-toggle.light-mode .theme-dot.dot-light{opacity:0}
     .auth-msg{min-height:19px;color:var(--danger);font-size:12px;margin-top:10px}
     .show-pass{display:flex;align-items:center;gap:7px;margin-top:8px;color:var(--muted);font-size:12px;font-weight:700}
     .show-pass input{width:auto}
@@ -912,6 +921,7 @@
       #themeToggleBtn .theme-pill span:not(.theme-icon){display:none}
       #themeToggleBtn .theme-icon{width:18px;height:18px;font-size:10px;top:1px}
       #themeToggleBtn.light-mode .theme-icon{left:22px}
+      #themeToggleBtn.auto-mode .theme-icon{left:12px}
       #themeToggleBtn.dark-mode .theme-icon{left:1px}
       .actions{display:grid;grid-template-columns:1fr auto;gap:6px;width:100%;min-width:0;order:3}
       .actions .search-wrap{grid-column:1/-1;width:100%;max-width:none;min-width:0}
@@ -1989,6 +1999,7 @@
     const colors = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#166534", "#10b981", "#14b8a6", "#06b6d4", "#3b82f6", "#6366f1", "#6d5dfc", "#8b5cf6", "#d946ef", "#ec4899", "#64748b"];
     const state = {
       theme: "sky",
+      themeMode: "dark",
       accent: "#6d5dfc",
       currentView: "home",
       currentCatId: null,
@@ -2653,14 +2664,40 @@
       }, 350);
     }
 
+    const THEME_FAMILIES = {
+      sky:    { dark: "sky",    light: "light" },
+      forest: { dark: "forest", light: "green" },
+      ember:  { dark: "ember",  light: "peach" },
+      bw:     { dark: "black",  light: "white" },
+    };
+    function familyOfTheme(key){
+      return Object.values(THEME_FAMILIES).find(f => f.dark === key || f.light === key) || THEME_FAMILIES.sky;
+    }
+    function systemPrefersDark(){
+      try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); }
+      catch { return true; }
+    }
+    function resolveThemeForMode(mode, family){
+      if (mode === "light") return family.light;
+      if (mode === "dark") return family.dark;
+      return systemPrefersDark() ? family.dark : family.light; // auto
+    }
     function toggleThemeMode(){
-      const pairs = {
-        "sky": "light", "light": "sky",
-        "forest": "green", "green": "forest",
-        "white": "black", "black": "white"
-      };
-      state.theme = pairs[state.theme] || (state.theme.endsWith("dark") ? "light" : "dark");
+      const order = ["dark", "auto", "light"];
+      const family = familyOfTheme(state.theme);
+      const nextMode = order[(order.indexOf(state.themeMode || "dark") + 1) % order.length];
+      state.themeMode = nextMode;
+      state.theme = resolveThemeForMode(nextMode, family);
       save(); render();
+    }
+    if (window.matchMedia) {
+      const systemDarkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const onSystemThemeChange = () => {
+        if ((state.themeMode || "dark") !== "auto") return;
+        state.theme = resolveThemeForMode("auto", familyOfTheme(state.theme));
+        save(); render();
+      };
+      systemDarkQuery.addEventListener ? systemDarkQuery.addEventListener("change", onSystemThemeChange) : systemDarkQuery.addListener(onSystemThemeChange);
     }
     function render(){
       updateGreeting();
@@ -6692,7 +6729,12 @@
         b.type = "button";
         b.style.cssText = `border:2px solid ${isActive ? "var(--accent)" : "var(--border)"};border-radius:10px;padding:10px 8px;background:var(--card2);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;transition:.2s;${isActive ? "box-shadow:0 0 0 3px var(--accent)33" : ""}`;
         b.innerHTML = `<span style="font-size:22px">${icon}</span><span style="font-size:11px;font-weight:800;color:${isActive ? "var(--accent2)" : "var(--muted)"}">${label}</span>`;
-        b.onclick = () => { state.theme = key; save(); render(); };
+        b.onclick = () => {
+          state.theme = key;
+          const family = familyOfTheme(key);
+          state.themeMode = family.light === key ? "light" : "dark";
+          save(); render();
+        };
         themeGrid.append(b);
       });
       theme.append(themeGrid, el("h3","", "צבע מוביל"));
@@ -8310,6 +8352,9 @@
     }
 
     function applyTheme(){
+      if ((state.themeMode || "dark") === "auto") {
+        state.theme = resolveThemeForMode("auto", familyOfTheme(state.theme));
+      }
       document.body.dataset.theme = state.theme || "dark";
       document.documentElement.style.setProperty("--accent", state.accent || "#6d5dfc");
 
@@ -8322,18 +8367,19 @@
       if (metaTC) metaTC.content = themeColors[state.theme] || "#05121e";
 
       // Pill toggle — syncs the header button and the home-page control-bar clone alike
+      // 3 עצירות: כהה / אוטומט (לפי מצב המערכת) / בהיר
       const themeToggleEls = document.querySelectorAll("#themeToggleBtn, .js-theme-toggle");
       if (themeToggleEls.length) {
-        const lightThemes = ["light", "green", "white", "peach"];
-        const isLight = lightThemes.includes(state.theme);
-        const icon = isLight ? "☀️" : "🌙";
-        const modeClass = isLight ? "light-mode" : "dark-mode";
+        const mode = state.themeMode || "dark";
+        const icon = mode === "auto" ? "🔄" : (mode === "light" ? "☀️" : "🌙");
+        const modeClass = mode === "auto" ? "auto-mode" : (mode === "light" ? "light-mode" : "dark-mode");
+        const titleMap = { dark:"מצב כהה — לחצו למעבר לאוטומט", auto:"מצב אוטומטי (לפי המערכת) — לחצו למעבר לבהיר", light:"מצב בהיר — לחצו למעבר לכהה" };
         themeToggleEls.forEach(btn => {
           btn.classList.add("theme-toggle");
-          btn.classList.remove("light-mode", "dark-mode");
+          btn.classList.remove("light-mode", "dark-mode", "auto-mode");
           btn.classList.add(modeClass);
-          btn.innerHTML = `<span class="theme-pill"><span class="theme-icon">${icon}</span></span>`;
-          btn.title = isLight ? "עבור למצב כהה" : "עבור למצב בהיר";
+          btn.innerHTML = `<span class="theme-pill"><span class="theme-dot dot-dark"></span><span class="theme-dot dot-auto"></span><span class="theme-dot dot-light"></span><span class="theme-icon">${icon}</span></span>`;
+          btn.title = titleMap[mode];
         });
       }
 
@@ -8392,6 +8438,7 @@
       if (!isSharedSync) {
         // העדפות תצוגה אישיות - רק ברשימה הפרטית, לא רלוונטי לרשימה משותפת
         state.theme = data.theme || state.theme;
+        state.themeMode = data.themeMode || state.themeMode || "dark";
         state.accent = data.accent || state.accent;
         state.currentView = data.currentView || state.currentView;
         state.currentCatId = data.currentCatId !== undefined ? data.currentCatId : state.currentCatId;
@@ -8462,6 +8509,7 @@
     function cleanState(s){
       const raw = {
         theme: s.theme || "sky",
+        themeMode: s.themeMode || "dark",
         accent: s.accent || "#6d5dfc",
         currentView: s.currentView || "home",
         currentCatId: s.currentCatId || null,
