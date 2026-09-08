@@ -2040,7 +2040,7 @@
     // חוזר (שקורה בכל עדכון מ-Firestore) לא יאפס כל כרטיס בחזרה ל"טוען…"
     // וייצור קפיצה חזותית — נשתמש בנתונים השמורים עד שמגיע עדכון טרי.
     const sharedHomePeekCache = {};
-    let cloudReady = false, saveTimer = null, suppressSave = false, draggedTaskId = null, draggedEventId = null, agendaPointerDrag = null, liveReorderTargetId = null;
+    let cloudReady = false, saveTimer = null, suppressSave = false, draggedTaskId = null, draggedEventId = null, agendaPointerDrag = null, liveReorderTargetId = null, pendingSaveFn = null;
     let selectedPlannerTaskId = null, draggedPlannerTaskId = null;
     let activeList = { type: "private", id: null, name: "הרשימה הפרטית", role: "owner" };
     let undoStack = []; 
@@ -2642,8 +2642,8 @@
 
       if (!cloudReady || !currentDoc) return;
       clearTimeout(saveTimer);
-      
-      saveTimer = setTimeout(() => {
+
+      pendingSaveFn = () => {
         let meta;
         if (currentListType === "shared") {
           const sharedPayload = {
@@ -2659,10 +2659,27 @@
         } else {
           meta = { state: payload, updatedAt: serverTimestamp() };
         }
+        pendingSaveFn = null;
         setDoc(currentDoc, meta, { merge: true })
           .catch(() => toast("השמירה לענן נכשלה זמנית"));
-      }, 350);
+      };
+      saveTimer = setTimeout(pendingSaveFn, 350);
     }
+    // דואגים שכתיבה ממתינה (350ms debounce) לא תלך לאיבוד אם המשתמש עוזב
+    // את הטאב/האפליקציה ממש אחרי שינוי (למשל וי/מחיקה ברשימת קניות) —
+    // בלי זה השינוי האחרון פשוט לא היה מגיע לענן ולמכשירים האחרים.
+    function flushPendingSave(){
+      if (!pendingSaveFn) return;
+      clearTimeout(saveTimer);
+      const fn = pendingSaveFn;
+      pendingSaveFn = null;
+      fn();
+    }
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") flushPendingSave();
+    });
+    window.addEventListener("pagehide", flushPendingSave);
+    window.addEventListener("beforeunload", flushPendingSave);
 
     const THEME_FAMILIES = {
       sky:    { dark: "sky",    light: "light" },
